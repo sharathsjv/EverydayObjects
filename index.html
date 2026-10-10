@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#000000">
+  <link rel="manifest" href="manifest.webmanifest">
+  <title>QA Tester</title>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; overscroll-behavior: none; touch-action: none; -webkit-user-select: none; user-select: none; }
+    #game { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; background: #000; }
+    #unity-canvas { display: block; width: 100%; height: 100%; background: #1E2230; }
+    #loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #fff; font: 600 20px system-ui, sans-serif; background: #1E2230; }
+    #bar { width: min(60vw, 320px); height: 10px; border-radius: 5px; background: #3A4058; overflow: hidden; }
+    #fill { width: 0%; height: 100%; background: #4F8EF7; transition: width .2s; }
+    #start { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: rgba(10, 12, 18, .82); color: #fff; font: 700 28px system-ui, sans-serif; text-align: center; padding: 24px; cursor: pointer; }
+    #start small { font-weight: 400; font-size: 16px; color: #9AA0B4; max-width: 420px; }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <canvas id="unity-canvas" tabindex="-1"></canvas>
+    <div id="loading"><div>Loading...</div><div id="bar"><div id="fill"></div></div></div>
+    <div id="start"><div id="start-title">Tap to play</div><small id="start-tip"></small></div>
+  </div>
+  <script>
+    var game = document.getElementById("game");
+    var canvas = document.getElementById("unity-canvas");
+    var startEl = document.getElementById("start");
+    var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    var isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    var standalone = window.matchMedia("(display-mode: fullscreen)").matches ||
+                     window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+    var canFullscreen = !!(game.requestFullscreen || game.webkitRequestFullscreen);
+
+    function isFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+
+    function goFullscreen() {
+      var req = game.requestFullscreen || game.webkitRequestFullscreen;
+      if (!req) return;
+      Promise.resolve(req.call(game)).then(function () {
+        if (screen.orientation && screen.orientation.lock) return screen.orientation.lock("landscape").catch(function () {});
+      }).catch(function () {});
+    }
+
+    function showStart(title, tip) {
+      document.getElementById("start-title").textContent = title;
+      document.getElementById("start-tip").textContent = tip || "";
+      startEl.style.display = "flex";
+    }
+
+    startEl.addEventListener("click", function () {
+      startEl.style.display = "none";
+      if (canFullscreen) goFullscreen();
+    });
+
+    // Leaving fullscreen on a phone: offer to go back in.
+    function onFullscreenChange() {
+      if (isMobile && canFullscreen && !standalone && !isFullscreen()) showStart("Tap to return to fullscreen");
+    }
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+
+    var buildUrl = "Build";
+    var config = {
+      arguments: [],
+      dataUrl: buildUrl + "/hitman-web.data.unityweb",
+      frameworkUrl: buildUrl + "/hitman-web.framework.js.unityweb",
+      codeUrl: buildUrl + "/hitman-web.wasm.unityweb",
+      streamingAssetsUrl: "StreamingAssets",
+      companyName: "DefaultCompany",
+      productName: "QA Tester",
+      productVersion: "0.1",
+      // Crisp on phones without rendering at 3x on very dense screens.
+      devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+    };
+
+    var script = document.createElement("script");
+    script.src = buildUrl + "/hitman-web.loader.js";
+    script.onload = function () {
+      createUnityInstance(canvas, config, function (progress) {
+        document.getElementById("fill").style.width = (100 * progress) + "%";
+      }).then(function () {
+        document.getElementById("loading").style.display = "none";
+        if (!isMobile || standalone) return;
+        if (canFullscreen) showStart("Tap to play", "Plays fullscreen in landscape");
+        else if (isIOS) showStart("Tap to play", "Tip: for a full-screen game without browser bars, use Share > Add to Home Screen and open it from there.");
+      }).catch(function (message) {
+        alert(message);
+      });
+    };
+    document.body.appendChild(script);
+  </script>
+</body>
+</html>
