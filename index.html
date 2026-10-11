@@ -18,6 +18,10 @@
     #fill { width: 0%; height: 100%; background: #4F8EF7; transition: width .2s; }
     #start { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: rgba(10, 12, 18, .82); color: #fff; font: 700 28px system-ui, sans-serif; text-align: center; padding: 24px; cursor: pointer; }
     #start small { font-weight: 400; font-size: 16px; color: #9AA0B4; max-width: 420px; }
+    #rotate { position: absolute; inset: 0; z-index: 10; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #0A0C12; color: #fff; font: 700 26px system-ui, sans-serif; text-align: center; padding: 24px; }
+    #rotate small { font-weight: 400; font-size: 15px; color: #9AA0B4; max-width: 320px; }
+    #phone { width: 44px; height: 76px; border: 4px solid #fff; border-radius: 9px; animation: turn 2s ease-in-out infinite; }
+    @keyframes turn { 0%, 20% { transform: rotate(0deg); } 50%, 80% { transform: rotate(-90deg); } 100% { transform: rotate(0deg); } }
   </style>
 </head>
 <body>
@@ -25,6 +29,7 @@
     <canvas id="unity-canvas" tabindex="-1"></canvas>
     <div id="loading"><div>Loading...</div><div id="bar"><div id="fill"></div></div></div>
     <div id="start"><div id="start-title">Tap to play</div><small id="start-tip"></small></div>
+    <div id="rotate"><div id="phone"></div><div>Turn your phone sideways</div><small id="rotate-tip">This game plays in landscape.</small></div>
   </div>
   <script>
     var game = document.getElementById("game");
@@ -55,11 +60,27 @@
     startEl.addEventListener("click", function () {
       startEl.style.display = "none";
       if (canFullscreen) goFullscreen();
+      setTimeout(updateRotate, 600);   // give the fullscreen landscape lock time to turn the screen first
     });
+
+    // Phones that can't be locked to landscape from a web page (iPhone Safari, or Android when the lock fails):
+    // cover the game while it's held upright and clear it as soon as it's turned sideways.
+    var rotateEl = document.getElementById("rotate");
+    var loaded = false;
+    if (isIOS) document.getElementById("rotate-tip").textContent =
+      "If the screen doesn't turn, swipe down from the top-right corner to open Control Centre and switch off Portrait Orientation Lock.";
+    function updateRotate() {
+      var upright = window.innerHeight > window.innerWidth;
+      var waitingForTap = canFullscreen && startEl.style.display === "flex";   // the tap itself turns the screen
+      rotateEl.style.display = isMobile && loaded && upright && !waitingForTap ? "flex" : "none";
+    }
+    window.addEventListener("resize", updateRotate);
+    window.addEventListener("orientationchange", function () { setTimeout(updateRotate, 300); });
 
     // Leaving fullscreen on a phone: offer to go back in.
     function onFullscreenChange() {
       if (isMobile && canFullscreen && !standalone && !isFullscreen()) showStart("Tap to return to fullscreen");
+      updateRotate();
     }
     document.addEventListener("fullscreenchange", onFullscreenChange);
     document.addEventListener("webkitfullscreenchange", onFullscreenChange);
@@ -85,9 +106,12 @@
         document.getElementById("fill").style.width = (100 * progress) + "%";
       }).then(function () {
         document.getElementById("loading").style.display = "none";
-        if (!isMobile || standalone) return;
-        if (canFullscreen) showStart("Tap to play", "Plays fullscreen in landscape");
-        else if (isIOS) showStart("Tap to play", "Tip: for a full-screen game without browser bars, use Share > Add to Home Screen and open it from there.");
+        loaded = true;
+        if (isMobile && !standalone) {
+          if (canFullscreen) showStart("Tap to play", "Plays fullscreen in landscape");
+          else if (isIOS) showStart("Tap to play", "Tip: for a full-screen game without browser bars, use Share > Add to Home Screen and open it from there.");
+        }
+        updateRotate();
       }).catch(function (message) {
         alert(message);
       });
