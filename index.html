@@ -9,6 +9,69 @@
   <meta name="theme-color" content="#000000">
   <link rel="manifest" href="manifest.webmanifest">
   <title>Everyday Objects</title>
+  <script>
+    // Analytics safety queue: the game's events go through here. Anything sent before PostHog has loaded (or while
+    // an ad blocker stops it loading) waits in the queue, capped at 200; nothing in here may ever throw into the game.
+    window.EOAnalytics = {
+      queue: [],
+      track: function (name, props) {
+        try {
+          if (window.posthog && posthog.__loaded) { posthog.capture(name, props); }
+          else { this.queue.push([name, props]); if (this.queue.length > 200) this.queue.shift(); }
+        } catch (e) { /* never break the game */ }
+      },
+      flush: function () {
+        try { while (this.queue.length && window.posthog && posthog.__loaded) { var e = this.queue.shift(); posthog.capture(e[0], e[1]); } } catch (e) {}
+      }
+    };
+  </script>
+  <script>
+    try {
+      !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],Object.defineProperty(u,"toString",{configurable:!0,enumerable:!0,writable:!0,value:function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e}}),Object.defineProperty(u.people,"toString",{configurable:!0,enumerable:!0,writable:!0,value:function(){return u.toString(1)+".people (stub)"}}),o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagResult isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+      // ?dev=1 (my own test plays) ignores the browser's Do Not Track so they still arrive, tagged internal.
+      var eoQuery = new URLSearchParams(location.search);
+      posthog.init('phc_zCRGCpUeghxntWbE3vehKHtPzy2eCr7sHmF4QmfzLZWi', {
+        api_host: 'https://eu.i.posthog.com',
+        person_profiles: 'identified_only',
+        persistence: 'localStorage',     // no cookies
+        autocapture: false,              // only our explicit events
+        capture_pageview: true,
+        capture_pageleave: true,
+        respect_dnt: !eoQuery.has('dev'),
+        request_batching: true,
+        loaded: function (ph) {
+          try {
+            var q = new URLSearchParams(location.search);
+            if (q.has('analytics_debug')) ph.debug();
+            if (q.has('no_analytics')) ph.opt_out_capturing();
+            if (q.has('dev')) ph.register({ internal: true });  // so my own plays can be filtered out
+            ph.register({ utm_source: q.get('utm_source') || 'direct' });
+          } catch (e) {}
+          window.EOAnalytics.flush();
+        }
+      });
+    } catch (e) {}
+
+    // In case the loaded callback came before anything was queued (or never comes): retry every 5 s for a minute.
+    (function () {
+      var tries = 0;
+      var timer = setInterval(function () {
+        tries++;
+        if (window.posthog && posthog.__loaded) window.EOAnalytics.flush();
+        if ((window.posthog && posthog.__loaded && !window.EOAnalytics.queue.length) || tries >= 12) clearInterval(timer);
+      }, 5000);
+    })();
+
+    // Tab hidden (switched away, phone locked, closing): sent straight away by beacon so it isn't lost with the page.
+    document.addEventListener('visibilitychange', function () {
+      try {
+        if (document.visibilityState !== 'hidden') return;
+        var props = { t_page: Math.round(performance.now() / 1000) };
+        if (window.posthog && posthog.__loaded) posthog.capture('session_paused', props, { transport: 'sendBeacon', send_instantly: true });
+        else window.EOAnalytics.track('session_paused', props);
+      } catch (e) {}
+    });
+  </script>
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; overscroll-behavior: none; touch-action: none; -webkit-user-select: none; user-select: none; }
     #game { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; background: #000; }
